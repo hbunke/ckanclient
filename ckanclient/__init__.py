@@ -491,11 +491,7 @@ class CkanClient(object):
         url = urlparse.urljoin(self.base_location, url)
 
         # If we are posting to ckan, we need to add ckan auth headers.
-<<<<<<< HEAD
-        if url.startswith(self.base_location):
-=======
         if url.startswith(urlparse.urljoin(self.base_location, '/')):
->>>>>>> ecff352e99fe72df81db5898bf9277ffe66193e0
             headers.update({
                 'Authorization': self.api_key,
                 'X-CKAN-API-Key': self.api_key,
