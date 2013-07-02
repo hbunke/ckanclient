@@ -9,7 +9,7 @@ __license__ = 'MIT'
 
 import os
 import re
-
+import ConfigParser
 import mimetypes, urlparse, hashlib
 from datetime import datetime
 
@@ -75,14 +75,14 @@ class ApiRequest(Request):
 class CkanClient(object):
     '''Client API implementation for CKAN.
 
-    :param base_location: default *http://thedatahub.org/api*
+    :param base_location: default *http://datahub.io/api*
     :param api_key: default *None*
     :param is_verbose: default *False*
     :param http_user: default *None*
     :param http_pass: default *None*
 
     '''
-    base_location = 'http://thedatahub.org/api'
+    base_location = 'http://datahub.io/api'
     resource_paths = {
         'Base': '',
         'Changeset Register': '/rest/changeset',
@@ -100,7 +100,10 @@ class CkanClient(object):
                  http_user=None, http_pass=None):
         if base_location is not None:
             self.base_location = base_location
-        self.api_key = api_key
+        if api_key:
+            self.api_key = api_key
+        else:
+            self.api_key = self._get_api_key_from_config()
         self.is_verbose = is_verbose
         if http_user and http_pass:
             password_mgr = HTTPPasswordMgrWithDefaultRealm()
@@ -649,3 +652,62 @@ class CkanClient(object):
         p = self.package_entity_get(package_name)
         p['resources'].append(r)
         return self.package_entity_put(p)
+
+    def _get_api_key_from_config(self):
+        parsed = urlparse.urlparse(self.base_location)
+        netloc = parsed.netloc
+        config_path = os.path.join(os.path.expanduser('~'), '.ckanclientrc')
+        if os.path.exists(config_path):
+            cfgparser = ConfigParser.SafeConfigParser()
+            cfgparser.readfp(open(config_path))
+            section = 'index:%s' % netloc
+            if cfgparser.has_section(section):
+                api_key = cfgparser.get(section, 'api_key', '')
+                return api_key
+
+## ======================================
+## Command line interface
+
+import sys
+import inspect
+import optparse
+import pprint
+def _object_methods(obj):
+    methods = inspect.getmembers(obj, inspect.ismethod)
+    methods = filter(lambda (name,y): not name.startswith('_'), methods)
+    methods = dict(methods)
+    return methods
+
+def main():
+    _methods = _object_methods(CkanClient)
+
+    usage = '''%prog {action} [additional-arguments]
+
+Actions:
+    '''
+    usage += '\n    '.join(
+        [ '%s: %s' % (name, m.__doc__ if m.__doc__ else '') for (name,m)
+        in sorted(_methods.items()) ])
+    parser = optparse.OptionParser(usage)
+    parser.add_option('--ckan', dest='ckan_instance',
+            help='URL of CKAN instance')
+    options, args = parser.parse_args()
+    if options.ckan_instance:
+        client = CkanClient(options.ckan_instance)
+    else:
+        client  = CkanClient()
+    del options.__dict__['ckan_instance']
+
+    if not len(args) >= 1 or not args[0] in _methods:
+        parser.print_help()
+        sys.exit(1)
+
+    method = args[0]
+    optdict = options.__dict__
+    output = getattr(client, method)(*args[1:], **optdict)
+    pprint.pprint(output)
+
+if __name__ == '__main__':
+    logging.basicConfig(level=logging.DEBUG)
+    cli()
+
